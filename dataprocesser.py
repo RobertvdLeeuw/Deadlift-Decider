@@ -1,4 +1,3 @@
-# from dataclasses import dataclass
 from os import listdir
 
 from sklearn.metrics import accuracy_score, classification_report
@@ -9,29 +8,16 @@ import numpy as np
 import pandas as pd
 
 
-class DataSegment:
-	x: list
-	y: list
-
-
-def Run(data: pd.DataFrame):
-	train = DataSegment()
-	test = DataSegment()
-
-	train.x, train.y, test.x, test.y = train_test_split(data['Frames'], data['Red_flags'], test_size=.3, stratify=data['Red_flags'])
-	del data
-
-	# Not tested from here on out
-
+def Run(trainData: pd.DataFrame, testData: pd.DataFrame):
 	model = SVC()
-	model.fit(train.x, train.y)
+	model.fit(trainData['Frames'], trainData['Outcome'])
 
-	pred = model.predict(test.x)
+	pred = model.predict(testData['Frames'])
 
-	acc = accuracy_score(pred, test.y)
+	acc = accuracy_score(pred, testData['Outcome'])
 	print(acc)
 
-	print(classification_report(test.y, pred, zero_division=0))
+	print(classification_report(testData['Outcome'], pred, zero_division=0))
 
 
 if __name__ == '__main__':

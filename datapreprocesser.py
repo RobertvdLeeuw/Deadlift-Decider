@@ -1,3 +1,4 @@
+from operator import itemgetter
 from os import getcwd, mkdir, listdir
 from shutil import rmtree
 from pathlib import Path
@@ -11,6 +12,9 @@ import cv2
 
 import numpy as np
 import pandas as pd
+
+from sklearn.model_selection import ShuffleSplit
+from sklearn.utils import resample
 
 # from numba import jit, cuda
 # import cython
@@ -103,17 +107,21 @@ def VideoToFrames(location: str):
 		_ExtractFrames(video, 'png')
 
 
-def GetFrameData(location: str, threadLimit: int) -> dict:
+def GetFrameData(location: str, threadLimit: int, splits: int) -> dict:
 	global data
 
-	videos = _GetFiles(location)
-	threadManager = ThreadManager(threadLimit=threadLimit,  # 128
-									dataQueue=videos,
-									function=_ThreadVideoLoader,
-									lock=Lock())
-	threadManager.Start()
+	videos = pd.Series(_GetFiles(location))
+	splitData = np.array_split(videos, splits)
 
-	return data
+	for splitVideos in splitData:
+		threadManager = ThreadManager(threadLimit=threadLimit,  # 128
+										dataQueue=list(splitVideos),
+										function=_ThreadVideoLoader,
+										lock=Lock())
+		threadManager.Start()
+
+		yield data
+		data = dict()
 
 
 def GetCSVData(location: str) -> pd.DataFrame:
@@ -121,18 +129,40 @@ def GetCSVData(location: str) -> pd.DataFrame:
 
 	del df['Notes'], df['Weight_class']
 
+	df = df.assign(Outcome=lambda x: x['Red_flags'] < 2)
+
 	return df
+
+
+def SplitData(titles: pd.Series, splits: int, tests: int, testSize: float) -> pd.Series:  # In order not to copy over the entire dataset once again, we'll just split based on the titles.
+	titles.sample(frac=1)
+	splitData = np.array_split(titles, splits)
+
+	for data in splitData:
+		data = np.array(data)
+
+		print(data)
+
+		splitter = ShuffleSplit(n_splits=tests,
+								test_size=testSize)
+	
+		for split in splitter.split(data):
+			train, test = list(split[0]), list(split[1])
+			yield data[train], data[test]
 
 
 def SortData(frameData: dict, csv: pd.DataFrame) -> pd.DataFrame:
 	frameDF = pd.DataFrame(list(frameData.items()), columns=['Title', 'Frames'])  # At this point we have 2 versions of the frames. Should something be done regarding RAM?
 
-	sortedCsv = csv.merge(frameDF,
-							how='inner',
-							left_on='Title',
-							right_on='Title',
-							validate="one_to_one")
+	sortedCsv = csv[csv['Title'].isin(frameDF['Title'])]
 
+	sortedCsv = sortedCsv.merge(frameDF,
+								how='inner',
+								left_on='Title',
+								right_on='Title',
+								validate="one_to_one")
+
+	print(f"DATA: {sortedCsv}")
 	return sortedCsv
 
 
