@@ -1,4 +1,5 @@
 from operator import itemgetter
+from dataclasses import dataclass
 from os import getcwd, mkdir, listdir
 from shutil import rmtree
 from pathlib import Path
@@ -7,6 +8,7 @@ from threading import Lock
 from customtools import CheckFile, Timer
 from threadmanager import ThreadManager
 
+from colormap import rgb2hex
 from PIL import Image
 import cv2
 
@@ -20,6 +22,12 @@ from sklearn.utils import resample
 # import cython
 
 data = dict()
+pd.options.mode.chained_assignment = None
+
+
+@dataclass
+class FrameHolder:  # Because DataFrames don't like holding lists as values.
+	frames: list
 
 
 @CheckFile
@@ -66,7 +74,8 @@ def _ExtractFrames(videoPath: str, fileType: str):
 @CheckFile
 def _ExtractPixels(framePath: str) -> np.array:
 	image = Image.open(framePath)
-	output = np.array(image)  # This gets called ~9 billion times. Can we speed it up?
+
+	output = np.array(image).reshape(-1)  # Flatting the data because SVC doesn't like more dimensions.
 
 	return output
 
@@ -85,7 +94,7 @@ def _LoadVideo(videoPath: str) -> tuple[list, str]:
 	for index, frame in enumerate(frames):
 		print(f"VIDEO: {videoPath}, FRAME {index}/{len(frames)}")
 
-		frameData = _ExtractPixels(frame)
+		frameData = _ExtractPixels(frame)  #
 		videoData.append(frameData)
 	print(f"LOADED '{videoPath}'.")
 	return videoData, videoName
@@ -141,8 +150,6 @@ def SplitData(titles: pd.Series, splits: int, tests: int, testSize: float) -> pd
 	for data in splitData:
 		data = np.array(data)
 
-		print(data)
-
 		splitter = ShuffleSplit(n_splits=tests,
 								test_size=testSize)
 	
@@ -152,18 +159,13 @@ def SplitData(titles: pd.Series, splits: int, tests: int, testSize: float) -> pd
 
 
 def SortData(frameData: dict, csv: pd.DataFrame) -> pd.DataFrame:
-	frameDF = pd.DataFrame(list(frameData.items()), columns=['Title', 'Frames'])  # At this point we have 2 versions of the frames. Should something be done regarding RAM?
+	sortedCSV = csv[csv['Title'].isin(frameData.keys())]
+	sortedCSV["Frames"] = np.NaN  # pd.Series(dtype='object')
 
-	sortedCsv = csv[csv['Title'].isin(frameDF['Title'])]
+	for key, val in frameData.items():
+		sortedCSV.loc[sortedCSV['Title'] == key, 'Frames'] = FrameHolder(frames=np.array(val).reshape(-1))
 
-	sortedCsv = sortedCsv.merge(frameDF,
-								how='inner',
-								left_on='Title',
-								right_on='Title',
-								validate="one_to_one")
-
-	print(f"DATA: {sortedCsv}")
-	return sortedCsv
+	return sortedCSV
 
 
 if __name__ == '__main__':  # 'Data/Frames'

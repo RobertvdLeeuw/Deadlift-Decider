@@ -1,7 +1,7 @@
 from threading import Thread, Lock
 
 
-class ThreadManager:
+class ThreadManager:  # Add subthreads for frames?
 	_threads = list()
 	_running = False
 

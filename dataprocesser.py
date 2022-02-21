@@ -8,11 +8,33 @@ import numpy as np
 import pandas as pd
 
 
+def Homogenize(input: list) -> np.array:  # Homogenizing nested lists
+	maxLength = max([len(x) for x in input])
+
+	output = list()
+
+	for item in input:
+		lengthDif = maxLength - len(item)
+
+		zeroes = [0] * lengthDif
+		newItem = np.append(item, zeroes)
+		print(len(newItem))
+		output.append(newItem)
+	return input
+
+
 def Run(trainData: pd.DataFrame, testData: pd.DataFrame):
 	model = SVC()
-	model.fit(trainData['Frames'], trainData['Outcome'])
 
-	pred = model.predict(testData['Frames'])
+	# trainFrames = np.array([d.frames for d in trainData['Frames']], dtype=int)
+	# testFrames = np.array([d.frames for d in testData['Frames']], dtype=int)
+
+	trainFrames = Homogenize([d.frames for d in trainData['Frames']])
+	testFrames = Homogenize([d.frames for d in testData['Frames']])
+
+	model.fit(trainFrames, trainData['Outcome'])
+
+	pred = model.predict(testFrames)
 
 	acc = accuracy_score(pred, testData['Outcome'])
 	print(acc)
